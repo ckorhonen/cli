@@ -1,0 +1,13 @@
+query GetJobArtifacts($jobId: ID!) {
+  job(uuid: $jobId) {
+    ... on JobTypeCommand {
+      pipeline {
+        slug
+        name
+      }
+      build {
+        number
+      }
+    }
+  }
+}

@@ -1991,6 +1991,268 @@ func (v *GetClusterQueuesResponse) GetOrganization() *GetClusterQueuesOrganizati
 	return v.Organization
 }
 
+// GetJobArtifactsJob includes the requested fields of the GraphQL interface Job.
+//
+// GetJobArtifactsJob is implemented by the following types:
+// GetJobArtifactsJobJobTypeBlock
+// GetJobArtifactsJobJobTypeCommand
+// GetJobArtifactsJobJobTypeTrigger
+// GetJobArtifactsJobJobTypeWait
+// The GraphQL type's documentation follows.
+//
+// Kinds of jobs that can exist on a build
+type GetJobArtifactsJob interface {
+	implementsGraphQLInterfaceGetJobArtifactsJob()
+	// GetTypename returns the receiver's concrete GraphQL type-name (see interface doc for possible values).
+	GetTypename() *string
+}
+
+func (v *GetJobArtifactsJobJobTypeBlock) implementsGraphQLInterfaceGetJobArtifactsJob()   {}
+func (v *GetJobArtifactsJobJobTypeCommand) implementsGraphQLInterfaceGetJobArtifactsJob() {}
+func (v *GetJobArtifactsJobJobTypeTrigger) implementsGraphQLInterfaceGetJobArtifactsJob() {}
+func (v *GetJobArtifactsJobJobTypeWait) implementsGraphQLInterfaceGetJobArtifactsJob()    {}
+
+func __unmarshalGetJobArtifactsJob(b []byte, v *GetJobArtifactsJob) error {
+	if string(b) == "null" {
+		return nil
+	}
+
+	var tn struct {
+		TypeName string `json:"__typename"`
+	}
+	err := json.Unmarshal(b, &tn)
+	if err != nil {
+		return err
+	}
+
+	switch tn.TypeName {
+	case "JobTypeBlock":
+		*v = new(GetJobArtifactsJobJobTypeBlock)
+		return json.Unmarshal(b, *v)
+	case "JobTypeCommand":
+		*v = new(GetJobArtifactsJobJobTypeCommand)
+		return json.Unmarshal(b, *v)
+	case "JobTypeTrigger":
+		*v = new(GetJobArtifactsJobJobTypeTrigger)
+		return json.Unmarshal(b, *v)
+	case "JobTypeWait":
+		*v = new(GetJobArtifactsJobJobTypeWait)
+		return json.Unmarshal(b, *v)
+	case "":
+		return fmt.Errorf(
+			"response was missing Job.__typename")
+	default:
+		return fmt.Errorf(
+			`unexpected concrete type for GetJobArtifactsJob: "%v"`, tn.TypeName)
+	}
+}
+
+func __marshalGetJobArtifactsJob(v *GetJobArtifactsJob) ([]byte, error) {
+
+	var typename string
+	switch v := (*v).(type) {
+	case *GetJobArtifactsJobJobTypeBlock:
+		typename = "JobTypeBlock"
+
+		result := struct {
+			TypeName string `json:"__typename"`
+			*GetJobArtifactsJobJobTypeBlock
+		}{typename, v}
+		return json.Marshal(result)
+	case *GetJobArtifactsJobJobTypeCommand:
+		typename = "JobTypeCommand"
+
+		result := struct {
+			TypeName string `json:"__typename"`
+			*GetJobArtifactsJobJobTypeCommand
+		}{typename, v}
+		return json.Marshal(result)
+	case *GetJobArtifactsJobJobTypeTrigger:
+		typename = "JobTypeTrigger"
+
+		result := struct {
+			TypeName string `json:"__typename"`
+			*GetJobArtifactsJobJobTypeTrigger
+		}{typename, v}
+		return json.Marshal(result)
+	case *GetJobArtifactsJobJobTypeWait:
+		typename = "JobTypeWait"
+
+		result := struct {
+			TypeName string `json:"__typename"`
+			*GetJobArtifactsJobJobTypeWait
+		}{typename, v}
+		return json.Marshal(result)
+	case nil:
+		return []byte("null"), nil
+	default:
+		return nil, fmt.Errorf(
+			`unexpected concrete type for GetJobArtifactsJob: "%T"`, v)
+	}
+}
+
+// GetJobArtifactsJobJobTypeBlock includes the requested fields of the GraphQL type JobTypeBlock.
+// The GraphQL type's documentation follows.
+//
+// A type of job that requires a user to unblock it before proceeding in a build pipeline
+type GetJobArtifactsJobJobTypeBlock struct {
+	Typename *string `json:"__typename"`
+}
+
+// GetTypename returns GetJobArtifactsJobJobTypeBlock.Typename, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeBlock) GetTypename() *string { return v.Typename }
+
+// GetJobArtifactsJobJobTypeCommand includes the requested fields of the GraphQL type JobTypeCommand.
+// The GraphQL type's documentation follows.
+//
+// A type of job that runs a command on an agent
+type GetJobArtifactsJobJobTypeCommand struct {
+	Typename *string `json:"__typename"`
+	// The pipeline that this job is a part of
+	Pipeline *GetJobArtifactsJobJobTypeCommandPipeline `json:"pipeline"`
+	// The build that this job is a part of
+	Build *GetJobArtifactsJobJobTypeCommandBuild `json:"build"`
+}
+
+// GetTypename returns GetJobArtifactsJobJobTypeCommand.Typename, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeCommand) GetTypename() *string { return v.Typename }
+
+// GetPipeline returns GetJobArtifactsJobJobTypeCommand.Pipeline, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeCommand) GetPipeline() *GetJobArtifactsJobJobTypeCommandPipeline {
+	return v.Pipeline
+}
+
+// GetBuild returns GetJobArtifactsJobJobTypeCommand.Build, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeCommand) GetBuild() *GetJobArtifactsJobJobTypeCommandBuild {
+	return v.Build
+}
+
+// GetJobArtifactsJobJobTypeCommandBuild includes the requested fields of the GraphQL type Build.
+// The GraphQL type's documentation follows.
+//
+// A build from a pipeline
+type GetJobArtifactsJobJobTypeCommandBuild struct {
+	// The number of the build
+	Number int `json:"number"`
+}
+
+// GetNumber returns GetJobArtifactsJobJobTypeCommandBuild.Number, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeCommandBuild) GetNumber() int { return v.Number }
+
+// GetJobArtifactsJobJobTypeCommandPipeline includes the requested fields of the GraphQL type Pipeline.
+// The GraphQL type's documentation follows.
+//
+// A pipeline
+type GetJobArtifactsJobJobTypeCommandPipeline struct {
+	// The slug of the pipeline
+	Slug string `json:"slug"`
+	// The name of the pipeline
+	Name string `json:"name"`
+}
+
+// GetSlug returns GetJobArtifactsJobJobTypeCommandPipeline.Slug, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeCommandPipeline) GetSlug() string { return v.Slug }
+
+// GetName returns GetJobArtifactsJobJobTypeCommandPipeline.Name, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeCommandPipeline) GetName() string { return v.Name }
+
+// GetJobArtifactsJobJobTypeTrigger includes the requested fields of the GraphQL type JobTypeTrigger.
+// The GraphQL type's documentation follows.
+//
+// A type of job that triggers another build on a pipeline
+type GetJobArtifactsJobJobTypeTrigger struct {
+	Typename *string `json:"__typename"`
+}
+
+// GetTypename returns GetJobArtifactsJobJobTypeTrigger.Typename, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeTrigger) GetTypename() *string { return v.Typename }
+
+// GetJobArtifactsJobJobTypeWait includes the requested fields of the GraphQL type JobTypeWait.
+// The GraphQL type's documentation follows.
+//
+// A type of job that waits for all previous jobs to pass before proceeding the build pipeline
+type GetJobArtifactsJobJobTypeWait struct {
+	Typename *string `json:"__typename"`
+}
+
+// GetTypename returns GetJobArtifactsJobJobTypeWait.Typename, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsJobJobTypeWait) GetTypename() *string { return v.Typename }
+
+// GetJobArtifactsResponse is returned by GetJobArtifacts on success.
+type GetJobArtifactsResponse struct {
+	// Find a build job
+	Job *GetJobArtifactsJob `json:"-"`
+}
+
+// GetJob returns GetJobArtifactsResponse.Job, and is useful for accessing the field via an interface.
+func (v *GetJobArtifactsResponse) GetJob() *GetJobArtifactsJob { return v.Job }
+
+func (v *GetJobArtifactsResponse) UnmarshalJSON(b []byte) error {
+
+	if string(b) == "null" {
+		return nil
+	}
+
+	var firstPass struct {
+		*GetJobArtifactsResponse
+		Job json.RawMessage `json:"job"`
+		graphql.NoUnmarshalJSON
+	}
+	firstPass.GetJobArtifactsResponse = v
+
+	err := json.Unmarshal(b, &firstPass)
+	if err != nil {
+		return err
+	}
+
+	{
+		dst := &v.Job
+		src := firstPass.Job
+		if len(src) != 0 && string(src) != "null" {
+			*dst = new(GetJobArtifactsJob)
+			err = __unmarshalGetJobArtifactsJob(
+				src, *dst)
+			if err != nil {
+				return fmt.Errorf(
+					"unable to unmarshal GetJobArtifactsResponse.Job: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+type __premarshalGetJobArtifactsResponse struct {
+	Job json.RawMessage `json:"job"`
+}
+
+func (v *GetJobArtifactsResponse) MarshalJSON() ([]byte, error) {
+	premarshaled, err := v.__premarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(premarshaled)
+}
+
+func (v *GetJobArtifactsResponse) __premarshalJSON() (*__premarshalGetJobArtifactsResponse, error) {
+	var retval __premarshalGetJobArtifactsResponse
+
+	{
+
+		dst := &retval.Job
+		src := v.Job
+		if src != nil {
+			var err error
+			*dst, err = __marshalGetJobArtifactsJob(
+				src)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"unable to marshal GetJobArtifactsResponse.Job: %w", err)
+			}
+		}
+	}
+	return &retval, nil
+}
+
 // GetOrganizationIDOrganization includes the requested fields of the GraphQL type Organization.
 // The GraphQL type's documentation follows.
 //
@@ -3323,6 +3585,14 @@ func (v *__GetClusterQueuesInput) GetOrgSlug() string { return v.OrgSlug }
 // GetClusterId returns __GetClusterQueuesInput.ClusterId, and is useful for accessing the field via an interface.
 func (v *__GetClusterQueuesInput) GetClusterId() string { return v.ClusterId }
 
+// __GetJobArtifactsInput is used internally by genqlient
+type __GetJobArtifactsInput struct {
+	JobId string `json:"jobId"`
+}
+
+// GetJobId returns __GetJobArtifactsInput.JobId, and is useful for accessing the field via an interface.
+func (v *__GetJobArtifactsInput) GetJobId() string { return v.JobId }
+
 // __GetOrganizationIDInput is used internally by genqlient
 type __GetOrganizationIDInput struct {
 	Slug string `json:"slug"`
@@ -3726,6 +3996,49 @@ func GetClusterQueues(
 	}
 
 	data_ = &GetClusterQueuesResponse{}
+	resp_ := &graphql.Response{Data: data_}
+
+	err_ = client_.MakeRequest(
+		ctx_,
+		req_,
+		resp_,
+	)
+
+	return data_, err_
+}
+
+// The query executed by GetJobArtifacts.
+const GetJobArtifacts_Operation = `
+query GetJobArtifacts ($jobId: ID!) {
+	job(uuid: $jobId) {
+		__typename
+		... on JobTypeCommand {
+			pipeline {
+				slug
+				name
+			}
+			build {
+				number
+			}
+		}
+	}
+}
+`
+
+func GetJobArtifacts(
+	ctx_ context.Context,
+	client_ graphql.Client,
+	jobId string,
+) (data_ *GetJobArtifactsResponse, err_ error) {
+	req_ := &graphql.Request{
+		OpName: "GetJobArtifacts",
+		Query:  GetJobArtifacts_Operation,
+		Variables: &__GetJobArtifactsInput{
+			JobId: jobId,
+		},
+	}
+
+	data_ = &GetJobArtifactsResponse{}
 	resp_ := &graphql.Response{Data: data_}
 
 	err_ = client_.MakeRequest(

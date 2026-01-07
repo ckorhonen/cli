@@ -17,20 +17,28 @@ import (
 	bkIO "github.com/buildkite/cli/v3/internal/io"
 	"github.com/buildkite/cli/v3/pkg/cmd/factory"
 	"github.com/buildkite/cli/v3/pkg/cmd/validation"
+	buildkite "github.com/buildkite/go-buildkite/v4"
 	"github.com/mattn/go-isatty"
 )
 
+const downloadTimeout = 10 * time.Minute
+
 type DownloadCmd struct {
-	ArtifactID string `arg:"" help:"Artifact UUID to download"`
+	ArtifactID string `arg:"" optional:"" help:"Artifact ID (UUID) to download"`
+	Pipeline   string `help:"This can be provided as a {pipeline-slug} or {org-slug}/{pipeline-slug} for multi-org setups." short:"p"`
+	JobID      string `help:"Download all artifacts for a job UUID"`
 }
 
 func (c *DownloadCmd) Help() string {
 	return `
-Use this command to download a specific artifact.
+Use this command to download artifacts.
 
 Examples:
-  # Download an artifact by UUID
-  $ bk artifacts download 0191727d-b5ce-4576-b37d-477ae0ca830c
+	# Download an artifact by UUID
+	$ bk artifacts download 0191727d-b5ce-4576-b37d-477ae0ca830c
+
+	# Download all artifacts for a job on the latest build for the current branch
+	$ bk artifacts download --job-id 0193903e-ecd9-4c51-9156-0738da987e87 -p my-pipeline
 `
 }
 
@@ -50,7 +58,24 @@ func (c *DownloadCmd) Run(kongCtx *kong.Context, globals cli.GlobalFlags) error 
 
 	ctx := context.Background()
 
-	downloadDir, downloadErr := download(ctx, f, c.ArtifactID)
+	artifactID := c.ArtifactID
+	if artifactID == "" && c.JobID == "" {
+		return fmt.Errorf("an artifact UUID or --job-id is required")
+	}
+	if artifactID != "" && c.JobID != "" {
+		return fmt.Errorf("choose only one source: artifact UUID or --job-id")
+	}
+	if c.JobID == "" && c.Pipeline != "" {
+		// something, something verbose flag...
+		// will remove this in future, probably will just comment this out for now
+		fmt.Fprintf(os.Stdout, "Info: ignoring --pipeline flag as it can only be used when targeting a job with --job-id\n")
+	}
+
+	if c.JobID != "" {
+		return downloadJobArtifacts(ctx, f, c)
+	}
+
+	downloadDir, downloadErr := downloadArtifact(ctx, f, artifactID)
 	if downloadErr != nil {
 		return downloadErr
 	}
@@ -59,7 +84,7 @@ func (c *DownloadCmd) Run(kongCtx *kong.Context, globals cli.GlobalFlags) error 
 	return nil
 }
 
-func download(ctx context.Context, f *factory.Factory, artifactID string) (string, error) {
+func downloadArtifact(ctx context.Context, f *factory.Factory, artifactID string) (string, error) {
 	resp, err := bkGraphQL.GetArtifacts(ctx, f.GraphQLClient, artifactID)
 	if err != nil {
 		return "", err
@@ -81,33 +106,102 @@ func download(ctx context.Context, f *factory.Factory, artifactID string) (strin
 	}
 	defer out.Close()
 
-	apiResp, apiErr := http.Get(resp.Artifact.DownloadURL)
-	if apiErr != nil {
-		return "", apiErr
-	}
-	defer apiResp.Body.Close()
-
-	if apiResp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to fetch the requested artifact (status %s)", apiResp.Status)
-	}
-
-	reader := io.Reader(apiResp.Body)
-	var pw *progressWriter
-	if apiResp.ContentLength > 0 && !f.Quiet && isatty.IsTerminal(os.Stderr.Fd()) {
-		pw = &progressWriter{total: apiResp.ContentLength, label: filename}
-		pw.print(false)
-		reader = io.TeeReader(apiResp.Body, pw)
-	}
-
-	_, err = io.Copy(out, reader)
-	if pw != nil {
-		pw.finish()
-	}
-	if err != nil {
+	if err := downloadToFile(ctx, downloadHTTPClient(), resp.Artifact.DownloadURL, filename, filename, out, f.Quiet); err != nil {
 		return "", err
 	}
 
 	return directory, nil
+}
+
+func downloadJobArtifacts(ctx context.Context, f *factory.Factory, cmd *DownloadCmd) error {
+	org := f.Config.OrganizationSlug()
+	pipelineSlug := ""
+	buildNumber := ""
+
+	jobCtx, err := resolveJobContext(ctx, f, cmd.JobID)
+	if err != nil {
+		return err
+	}
+	pipelineSlug = jobCtx.PipelineSlug
+	if pipelineSlug == "" {
+		return fmt.Errorf("no pipeline found for job: %s", cmd.JobID)
+	}
+
+	if cmd.Pipeline != "" {
+		pFlag := cmd.Pipeline
+		if strings.Contains(pFlag, "/") {
+			parts := strings.Split(pFlag, "/")
+			pFlag = parts[len(parts)-1]
+		}
+		if pipelineSlug != pFlag {
+			return fmt.Errorf("job belongs to pipeline %s, but --pipeline was %s", pipelineSlug, cmd.Pipeline)
+		}
+	}
+
+	buildNumber = fmt.Sprint(jobCtx.BuildNumber)
+
+	var (
+		artifacts []buildkite.Artifact
+		listErr   error
+	)
+	if err := bkIO.SpinWhile(f, "Loading job artifacts", func() {
+		var resp []buildkite.Artifact
+		resp, _, listErr = f.RestAPIClient.Artifacts.ListByJob(ctx, org, pipelineSlug, buildNumber, cmd.JobID, nil)
+		if listErr == nil {
+			artifacts = resp
+		}
+	}); err != nil {
+		return err
+	}
+	if listErr != nil {
+		return listErr
+	}
+
+	if len(artifacts) == 0 {
+		return fmt.Errorf("no artifacts found for job: %s", cmd.JobID)
+	}
+
+	baseDir := fmt.Sprintf("job-%s", cmd.JobID)
+	if err := os.MkdirAll(baseDir, os.ModePerm); err != nil {
+		return err
+	}
+
+	client := downloadHTTPClient()
+	for _, a := range artifacts {
+		artifactPath := a.Path
+		if artifactPath == "" {
+			artifactPath = a.Filename
+		}
+		dir := filepath.Join(baseDir, filepath.Dir(artifactPath))
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+			return err
+		}
+
+		filename := filepath.Base(artifactPath)
+		if filename == "." || filename == "" {
+			filename = a.ID
+		}
+		targetPath := filepath.Join(dir, filename)
+
+		file, err := os.Create(targetPath)
+		if err != nil {
+			return err
+		}
+
+		req, reqErr := f.RestAPIClient.NewRequest(ctx, http.MethodGet, a.DownloadURL, nil)
+		if reqErr != nil {
+			file.Close()
+			return reqErr
+		}
+		if err := downloadWithRequest(client, req, filename, artifactPath, file, f.Quiet); err != nil {
+			file.Close()
+			return err
+		}
+		_ = file.Close()
+		fmt.Printf("Downloaded artifact to: %s\n", targetPath)
+	}
+
+	return nil
 }
 
 type progressWriter struct {
@@ -116,6 +210,88 @@ type progressWriter struct {
 	lastPrint time.Time
 	lastLen   int
 	label     string
+}
+
+func downloadToFile(ctx context.Context, client *http.Client, url, label, artifactPath string, out io.Writer, quiet bool) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	return downloadWithRequest(client, req, label, artifactPath, out, quiet)
+}
+
+func downloadWithRequest(client *http.Client, req *http.Request, label, artifactPath string, out io.Writer, quiet bool) error {
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to fetch the requested artifact (status %s)", resp.Status)
+	}
+
+	reader := io.Reader(resp.Body)
+	var pw *progressWriter
+	if resp.ContentLength > 0 && !quiet && isatty.IsTerminal(os.Stderr.Fd()) {
+		displayLabel := label
+		if artifactPath != "" && artifactPath != label {
+			displayLabel = fmt.Sprintf("%s (%s)", label, artifactPath)
+		}
+		pw = &progressWriter{total: resp.ContentLength, label: displayLabel}
+		pw.print(false)
+		reader = io.TeeReader(resp.Body, pw)
+	}
+
+	_, err = io.Copy(out, reader)
+	if pw != nil {
+		pw.finish()
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func downloadHTTPClient() *http.Client {
+	return &http.Client{Timeout: downloadTimeout}
+}
+
+type jobContext struct {
+	PipelineSlug string
+	BuildNumber  int
+}
+
+func resolveJobContext(ctx context.Context, f *factory.Factory, jobID string) (*jobContext, error) {
+	resp, err := bkGraphQL.GetJobArtifacts(ctx, f.GraphQLClient, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Job == nil || *resp.Job == nil {
+		return nil, fmt.Errorf("no job found with ID: %s", jobID)
+	}
+
+	job := *resp.Job
+
+	cmdJob, ok := job.(*bkGraphQL.GetJobArtifactsJobJobTypeCommand)
+	if !ok || cmdJob == nil {
+		return nil, fmt.Errorf("job %s is not a command job with artifacts", jobID)
+	}
+	if cmdJob.Build == nil || cmdJob.Pipeline == nil {
+		return nil, fmt.Errorf("no build or pipeline found for job: %s", jobID)
+	}
+
+	pipelineSlug := cmdJob.Pipeline.Slug
+	if pipelineSlug == "" {
+		pipelineSlug = cmdJob.Pipeline.Name
+	}
+
+	return &jobContext{
+		PipelineSlug: pipelineSlug,
+		BuildNumber:  cmdJob.Build.Number,
+	}, nil
 }
 
 func (p *progressWriter) Write(b []byte) (int, error) {
